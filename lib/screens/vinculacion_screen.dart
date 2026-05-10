@@ -4,7 +4,11 @@ import 'home_screen.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class VinculacionScreen extends StatefulWidget {
-  const VinculacionScreen({Key? key}) : super(key: key);
+  /// Si [isAdding] es true, se muestra como pantalla de "agregar tienda"
+  /// sin redirigir automáticamente (para usuarios que ya tienen proveedor).
+  final bool isAdding;
+
+  const VinculacionScreen({Key? key, this.isAdding = false}) : super(key: key);
 
   @override
   _VinculacionScreenState createState() => _VinculacionScreenState();
@@ -18,13 +22,20 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
   @override
   void initState() {
     super.initState();
-    _checkExistingProvider();
+    if (!widget.isAdding) {
+      _checkExistingProvider();
+    }
+  }
+
+  @override
+  void dispose() {
+    _codigoController.dispose();
+    super.dispose();
   }
 
   Future<void> _checkExistingProvider() async {
     final providerId = await _dataService.getProviderId();
     if (providerId != null && providerId.isNotEmpty) {
-      // Ya tiene un proveedor vinculado
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -37,7 +48,9 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
     final codigo = _codigoController.text.trim();
     if (codigo.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Por favor, ingresa un código válido'), backgroundColor: Colors.orange),
+        const SnackBar(
+            content: Text('Por favor, ingresa un código válido'),
+            backgroundColor: Colors.orange),
       );
       return;
     }
@@ -56,20 +69,59 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
         throw Exception('El código no es válido o el proveedor no existe.');
       }
 
+      // Obtener perfil del usuario para pre-registrarlo en la nueva tienda
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        final perfil = await _dataService.getMiPerfil();
+        final nombre = perfil?['nombre'] ??
+            Supabase.instance.client.auth.currentUser
+                ?.userMetadata?['full_name'] ??
+            'Cliente Nuevo';
+
+        // Verificar si ya existe en esta tienda
+        final clienteExistente = await Supabase.instance.client
+            .from('clientes')
+            .select()
+            .eq('user_id', codigo)
+            .eq('telefono', userId)
+            .maybeSingle();
+
+        if (clienteExistente == null) {
+          // Registrarlo automáticamente en la nueva tienda
+          await Supabase.instance.client.from('clientes').insert({
+            'user_id': codigo,
+            'nombre': nombre,
+            'telefono': userId,
+            'direccion': perfil?['direccion'],
+            'latitud': perfil?['latitud'],
+            'longitud': perfil?['longitud'],
+          });
+        }
+      }
+
       await _dataService.setProviderId(codigo);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Vinculado a: ${response['nombre_negocio']}'), backgroundColor: Colors.green),
+          SnackBar(
+              content: Text('¡Vinculado a: ${response['nombre_negocio']}!'),
+              backgroundColor: Colors.green),
         );
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
+
+        if (widget.isAdding) {
+          // Solo regresar si estamos en modo "agregar"
+          Navigator.of(context).pop();
+        } else {
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (_) => const HomeScreen()),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -81,15 +133,15 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vincular Proveedor'),
+        title: Text(widget.isAdding ? 'Agregar Tienda' : 'Vincular Proveedor'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await Supabase.instance.client.auth.signOut();
-              // Volverá automáticamente al LoginScreen debido a la suscripción en auth_service o main
-            },
-          )
+          if (!widget.isAdding)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await Supabase.instance.client.auth.signOut();
+              },
+            ),
         ],
       ),
       body: SafeArea(
@@ -99,12 +151,21 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.storefront, size: 80, color: Color(0xFF1E3A8A)),
+              Icon(
+                widget.isAdding
+                    ? Icons.add_business_outlined
+                    : Icons.storefront,
+                size: 80,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               const SizedBox(height: 24),
-              const Text(
-                '¡Bienvenido!',
+              Text(
+                widget.isAdding ? 'Nueva Tienda' : '¡Bienvenido!',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A)),
+                style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -124,9 +185,12 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
               const SizedBox(height: 24),
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton(
+                  : ElevatedButton.icon(
                       onPressed: _vincular,
-                      child: const Text('Vincular y Entrar'),
+                      icon: const Icon(Icons.link),
+                      label: Text(widget.isAdding
+                          ? 'Vincular nueva tienda'
+                          : 'Vincular y Entrar'),
                     ),
             ],
           ),
