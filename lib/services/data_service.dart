@@ -8,6 +8,13 @@ class DataService {
   final SupabaseClient _supabase = Supabase.instance.client;
   static const String _providerKey = 'provider_id';
 
+  // Claves de perfil local (para guardar antes de vincular tienda)
+  static const String _nombreKey = 'perfil_nombre';
+  static const String _telefonoKey = 'perfil_telefono';
+  static const String _direccionKey = 'perfil_direccion';
+  static const String _latitudKey = 'perfil_latitud';
+  static const String _longitudKey = 'perfil_longitud';
+
   // ─────────────────────────────────────────────────────────────
   // SharedPreferences: proveedor activo
   // ─────────────────────────────────────────────────────────────
@@ -25,6 +32,40 @@ class DataService {
   Future<void> clearProviderId() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_providerKey);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // SharedPreferences: perfil local (antes de vincular tienda)
+  // ─────────────────────────────────────────────────────────────
+
+  /// Guarda los datos del perfil localmente. Se usan al vincular tiendas.
+  Future<void> guardarPerfilLocal({
+    required String nombre,
+    String? telefono,
+    String? direccion,
+    double? latitud,
+    double? longitud,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_nombreKey, nombre);
+    if (telefono != null) await prefs.setString(_telefonoKey, telefono);
+    if (direccion != null) await prefs.setString(_direccionKey, direccion);
+    if (latitud != null) await prefs.setDouble(_latitudKey, latitud);
+    if (longitud != null) await prefs.setDouble(_longitudKey, longitud);
+  }
+
+  /// Lee el perfil local (de SharedPreferences). Retorna null si no hay datos.
+  Future<Map<String, dynamic>?> getPerfilLocal() async {
+    final prefs = await SharedPreferences.getInstance();
+    final nombre = prefs.getString(_nombreKey);
+    if (nombre == null || nombre.isEmpty) return null;
+    return {
+      'nombre': nombre,
+      'telefono_real': prefs.getString(_telefonoKey) ?? '',
+      'direccion': prefs.getString(_direccionKey),
+      'latitud': prefs.getDouble(_latitudKey),
+      'longitud': prefs.getDouble(_longitudKey),
+    };
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -48,13 +89,10 @@ class DataService {
   // MÚLTIPLES TIENDAS
   // ─────────────────────────────────────────────────────────────
 
-  /// Devuelve todos los negocios a los que este usuario está vinculado
-  /// (buscando registros en `clientes` donde telefono = auth.uid())
   Future<List<Map<String, dynamic>>> getLinkedProviders() async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return [];
 
-    // Obtenemos todos los registros de clientes cuyo "telefono" es nuestro userId
     final clienteRows = await _supabase
         .from('clientes')
         .select('user_id')
@@ -65,7 +103,6 @@ class DataService {
     final providerIds =
         clienteRows.map((c) => c['user_id'] as String).toSet().toList();
 
-    // Traemos info de esos negocios
     final negocios = await _supabase
         .from('negocios')
         .select()
@@ -74,7 +111,6 @@ class DataService {
     return (negocios as List).cast<Map<String, dynamic>>();
   }
 
-  /// Desvincula al usuario de un proveedor eliminando su registro de clientes
   Future<void> desvincularProveedor(String providerId) async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return;
@@ -117,10 +153,26 @@ class DataService {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // PERFIL DEL CLIENTE
+  // PERFIL DEL CLIENTE (en Supabase)
   // ─────────────────────────────────────────────────────────────
 
-  /// Obtiene el perfil del usuario leyendo cualquiera de sus registros en `clientes`
+  /// Retorna true si el usuario ya tiene al menos un registro en `clientes`
+  Future<bool> tienePerfil() async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) return false;
+
+    final row = await _supabase
+        .from('clientes')
+        .select('id')
+        .eq('telefono', userId)
+        .limit(1)
+        .maybeSingle();
+
+    return row != null;
+  }
+
+  /// Obtiene el perfil del usuario desde Supabase (cualquier tienda vinculada)
+  /// Si no hay en Supabase, regresa el perfil local guardado en SharedPreferences.
   Future<Map<String, dynamic>?> getMiPerfil() async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return null;
@@ -132,16 +184,52 @@ class DataService {
         .limit(1)
         .maybeSingle();
 
-    if (row == null) return null;
+    if (row != null) {
+      return {
+        'nombre': row['nombre'],
+        'telefono_real': row['telefono_real'] ?? '',
+        'direccion': row['direccion'],
+        'latitud': row['latitud'],
+        'longitud': row['longitud'],
+      };
+    }
 
-    // Separamos el teléfono real (que puede haber sido guardado aparte)
-    return {
-      'nombre': row['nombre'],
-      'telefono_real': row['telefono_real'] ?? '',
-      'direccion': row['direccion'],
-      'latitud': row['latitud'],
-      'longitud': row['longitud'],
-    };
+    // Fallback: perfil guardado localmente antes de vincular
+    return getPerfilLocal();
+  }
+
+  /// Registra al cliente en la tienda de un proveedor (idempotente).
+  Future<void> registrarClienteEnTienda({
+    required String providerId,
+    required String nombre,
+    String? telefonoReal,
+    String? direccion,
+    double? latitud,
+    double? longitud,
+  }) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) throw Exception('No has iniciado sesión');
+
+    // Verificar si ya está registrado en esta tienda
+    final existente = await _supabase
+        .from('clientes')
+        .select('id')
+        .eq('user_id', providerId)
+        .eq('telefono', userId)
+        .maybeSingle();
+
+    if (existente != null) return; // Ya registrado — no duplicar
+
+    // Insertar nuevo registro
+    await _supabase.from('clientes').insert({
+      'user_id': providerId,   // ID del proveedor
+      'nombre': nombre,
+      'telefono': userId,      // UUID del cliente como identificador único
+      'telefono_real': telefonoReal?.isNotEmpty == true ? telefonoReal : null,
+      'direccion': direccion?.isNotEmpty == true ? direccion : null,
+      'latitud': latitud,
+      'longitud': longitud,
+    });
   }
 
   /// Actualiza el perfil en TODOS los registros de clientes del usuario
@@ -165,18 +253,25 @@ class DataService {
           'longitud': longitud,
         })
         .eq('telefono', userId);
+
+    // También actualizar perfil local
+    await guardarPerfilLocal(
+      nombre: nombre,
+      telefono: telefono,
+      direccion: direccion,
+      latitud: latitud,
+      longitud: longitud,
+    );
   }
 
   // ─────────────────────────────────────────────────────────────
   // PEDIDOS
   // ─────────────────────────────────────────────────────────────
 
-  /// Obtiene todos los pedidos del usuario en todas sus tiendas
   Future<List<Map<String, dynamic>>> getMisPedidos() async {
     final userId = _supabase.auth.currentUser?.id;
     if (userId == null) return [];
 
-    // Primero obtenemos los IDs de cliente en todas las tiendas
     final clienteRows = await _supabase
         .from('clientes')
         .select('id')
@@ -184,22 +279,44 @@ class DataService {
 
     if ((clienteRows as List).isEmpty) return [];
 
-    final clienteIds =
-        clienteRows.map((c) => c['id'] as String).toList();
+    final clienteIds = clienteRows.map((c) => c['id'] as String).toList();
 
-    // Traemos las ventas con info del negocio
+    // 1. Traer ventas sin el join de negocios (no hay FK directa entre ventas y negocios)
     final ventas = await _supabase
         .from('ventas')
-        .select('*, negocios(nombre_negocio)')
+        .select('*')
         .inFilter('cliente_id', clienteIds)
         .order('fecha', ascending: false);
 
-    return (ventas as List).cast<Map<String, dynamic>>();
+    final ventasList = (ventas as List).cast<Map<String, dynamic>>();
+    if (ventasList.isEmpty) return [];
+
+    // 2. Obtener los nombres de los negocios por sus IDs (user_id de la venta = id del negocio)
+    final providerIds =
+        ventasList.map((v) => v['user_id'] as String).toSet().toList();
+
+    final negociosRows = await _supabase
+        .from('negocios')
+        .select('id, nombre_negocio')
+        .inFilter('id', providerIds);
+
+    final Map<String, String> negocioNombres = {
+      for (var n in negociosRows as List)
+        n['id'] as String: (n['nombre_negocio'] as String?) ?? 'Tienda'
+    };
+
+    // 3. Fusionar: agregar 'negocios' como mapa anidado igual que haría Supabase
+    return ventasList.map((v) {
+      return {
+        ...v,
+        'negocios': {
+          'nombre_negocio': negocioNombres[v['user_id']] ?? 'Tienda',
+        },
+      };
+    }).toList();
   }
 
-  /// Devuelve los detalles (productos) de un pedido específico
-  Future<List<Map<String, dynamic>>> getDetallesPedido(
-      String ventaId) async {
+  Future<List<Map<String, dynamic>>> getDetallesPedido(String ventaId) async {
     final detalles = await _supabase
         .from('detalles_venta')
         .select('*, productos(nombre)')
@@ -221,35 +338,38 @@ class DataService {
     if (userId == null) throw Exception('No has iniciado sesión');
 
     // Buscar registro de cliente en esta tienda
-    final clienteRes = await _supabase
+    var clienteRes = await _supabase
         .from('clientes')
-        .select()
+        .select('id')
         .eq('user_id', providerId)
         .eq('telefono', userId)
         .maybeSingle();
 
-    String clienteId;
-
     if (clienteRes == null) {
-      // Obtener datos del perfil del usuario para pre-llenar
+      // Registrar con datos del perfil
       final perfil = await getMiPerfil();
       final nombre = perfil?['nombre'] ??
           _supabase.auth.currentUser?.userMetadata?['full_name'] ??
-          'Cliente Nuevo';
+          'Cliente';
 
-      final nuevoCliente = await _supabase.from('clientes').insert({
-        'user_id': providerId,
-        'nombre': nombre,
-        'telefono': userId, // UUID como identificador
-        'direccion': perfil?['direccion'],
-        'latitud': perfil?['latitud'],
-        'longitud': perfil?['longitud'],
-      }).select().single();
+      await registrarClienteEnTienda(
+        providerId: providerId,
+        nombre: nombre,
+        telefonoReal: perfil?['telefono_real'],
+        direccion: perfil?['direccion'],
+        latitud: (perfil?['latitud'] as num?)?.toDouble(),
+        longitud: (perfil?['longitud'] as num?)?.toDouble(),
+      );
 
-      clienteId = nuevoCliente['id'];
-    } else {
-      clienteId = clienteRes['id'];
+      clienteRes = await _supabase
+          .from('clientes')
+          .select('id')
+          .eq('user_id', providerId)
+          .eq('telefono', userId)
+          .single();
     }
+
+    final clienteId = clienteRes['id'] as String;
 
     // Insertar venta
     final ventaRes = await _supabase.from('ventas').insert({

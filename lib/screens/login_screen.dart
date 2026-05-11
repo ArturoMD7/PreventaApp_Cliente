@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'vinculacion_screen.dart'; 
+import '../services/data_service.dart';
+import 'vinculacion_screen.dart';
+import 'completar_perfil_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -30,6 +30,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     _animationController.forward();
   }
 
+  final DataService _dataService = DataService();
+
   @override
   void dispose() {
     _animationController.dispose();
@@ -42,9 +44,21 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     });
     try {
       await _authService.signInWithGoogle();
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (context) => const VinculacionScreen()),
+      if (!mounted) return;
+
+      // Verificar si tiene datos de perfil (Supabase o local)
+      final tienePerfil = await _dataService.tienePerfil();
+      final tienePerfilLocal = await _dataService.getPerfilLocal() != null;
+      if (!mounted) return;
+
+      final nav = Navigator.of(context);
+      if (!tienePerfil && !tienePerfilLocal) {
+        nav.pushReplacement(
+          MaterialPageRoute(builder: (_) => const CompletarPerfilScreen()),
+        );
+      } else {
+        nav.pushReplacement(
+          MaterialPageRoute(builder: (_) => const VinculacionScreen()),
         );
       }
     } catch (e) {
@@ -108,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           ),
                           const SizedBox(height: 24),
                           const Text(
-                            'PreventaApp',
+                            'PreventaApp Cliente',
                             style: TextStyle(
                               fontFamily: 'Roboto', // Modern sans-serif
                               fontSize: 34,

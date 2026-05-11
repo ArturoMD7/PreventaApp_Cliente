@@ -4,9 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
 import 'screens/vinculacion_screen.dart';
-import 'services/data_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/data_service.dart';
 import 'home_screen.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 class VinculacionScreen extends StatefulWidget {
   /// Si [isAdding] es true, se muestra como pantalla de "agregar tienda"
-  /// sin redirigir automáticamente (para usuarios que ya tienen proveedor).
+  /// sin redirigir automáticamente.
   final bool isAdding;
 
-  const VinculacionScreen({Key? key, this.isAdding = false}) : super(key: key);
+  const VinculacionScreen({super.key, this.isAdding = false});
 
   @override
-  _VinculacionScreenState createState() => _VinculacionScreenState();
+  State<VinculacionScreen> createState() => _VinculacionScreenState();
 }
 
 class _VinculacionScreenState extends State<VinculacionScreen> {
@@ -33,14 +33,52 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
     super.dispose();
   }
 
+  /// Verifica si ya hay proveedor guardado Y si el cliente está registrado en él.
+  /// Si ya están registrados, va directo a HomeScreen.
+  /// Si tiene proveedor pero no registro, lo registra antes de ir.
   Future<void> _checkExistingProvider() async {
     final providerId = await _dataService.getProviderId();
-    if (providerId != null && providerId.isNotEmpty) {
+    if (providerId == null || providerId.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    try {
+      // Verificar si ya está registrado en esa tienda
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId != null) {
+        final existente = await Supabase.instance.client
+            .from('clientes')
+            .select('id')
+            .eq('user_id', providerId)
+            .eq('telefono', userId)
+            .maybeSingle();
+
+        if (existente == null) {
+          // Tiene el proveedor guardado pero nunca quedó registrado → registrar ahora
+          final perfil = await _dataService.getMiPerfil();
+          if (perfil != null) {
+            await _dataService.registrarClienteEnTienda(
+              providerId: providerId,
+              nombre: perfil['nombre'] ??
+                  Supabase.instance.client.auth.currentUser
+                      ?.userMetadata?['full_name'] ??
+                  'Cliente',
+              telefonoReal: perfil['telefono_real'],
+              direccion: perfil['direccion'],
+              latitud: (perfil['latitud'] as num?)?.toDouble(),
+              longitud: (perfil['longitud'] as num?)?.toDouble(),
+            );
+          }
+        }
+      }
+
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
         );
       }
+    } catch (e) {
+      // Si falla, simplemente mostrar la pantalla de vinculación
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -58,58 +96,47 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // Verificar si el negocio existe
-      final response = await Supabase.instance.client
+      // 1. Verificar que el negocio existe
+      final negocio = await Supabase.instance.client
           .from('negocios')
           .select()
           .eq('id', codigo)
           .maybeSingle();
 
-      if (response == null) {
+      if (negocio == null) {
         throw Exception('El código no es válido o el proveedor no existe.');
       }
 
-      // Obtener perfil del usuario para pre-registrarlo en la nueva tienda
-      final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId != null) {
-        final perfil = await _dataService.getMiPerfil();
-        final nombre = perfil?['nombre'] ??
-            Supabase.instance.client.auth.currentUser
-                ?.userMetadata?['full_name'] ??
-            'Cliente Nuevo';
+      final nombreNegocio = negocio['nombre_negocio'] as String? ?? 'la tienda';
 
-        // Verificar si ya existe en esta tienda
-        final clienteExistente = await Supabase.instance.client
-            .from('clientes')
-            .select()
-            .eq('user_id', codigo)
-            .eq('telefono', userId)
-            .maybeSingle();
+      // 2. Obtener perfil (de Supabase o local)
+      final perfil = await _dataService.getMiPerfil();
+      final nombre = perfil?['nombre'] ??
+          Supabase.instance.client.auth.currentUser
+              ?.userMetadata?['full_name'] ??
+          'Cliente';
 
-        if (clienteExistente == null) {
-          // Registrarlo automáticamente en la nueva tienda
-          await Supabase.instance.client.from('clientes').insert({
-            'user_id': codigo,
-            'nombre': nombre,
-            'telefono': userId,
-            'direccion': perfil?['direccion'],
-            'latitud': perfil?['latitud'],
-            'longitud': perfil?['longitud'],
-          });
-        }
-      }
+      // 3. Registrar en la tienda (idempotente)
+      await _dataService.registrarClienteEnTienda(
+        providerId: codigo,
+        nombre: nombre,
+        telefonoReal: perfil?['telefono_real'],
+        direccion: perfil?['direccion'],
+        latitud: (perfil?['latitud'] as num?)?.toDouble(),
+        longitud: (perfil?['longitud'] as num?)?.toDouble(),
+      );
 
+      // 4. Guardar proveedor activo
       await _dataService.setProviderId(codigo);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('¡Vinculado a: ${response['nombre_negocio']}!'),
+              content: Text('¡Vinculado a: $nombreNegocio!'),
               backgroundColor: Colors.green),
         );
 
         if (widget.isAdding) {
-          // Solo regresar si estamos en modo "agregar"
           Navigator.of(context).pop();
         } else {
           Navigator.of(context).pushReplacement(
@@ -120,8 +147,7 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text(e.toString()), backgroundColor: Colors.red),
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -179,7 +205,7 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Código de Proveedor',
                   prefixIcon: Icon(Icons.qr_code),
-                  hintText: 'Ej. a1b2c3d4-e5f6-7g8h...',
+                  hintText: 'Ej. a1b2c3d4-e5f6-7890...',
                 ),
               ),
               const SizedBox(height: 24),
