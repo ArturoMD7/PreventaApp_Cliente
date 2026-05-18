@@ -6,8 +6,7 @@ import 'package:geolocator/geolocator.dart';
 class SeleccionarUbicacionScreen extends StatefulWidget {
   final LatLng? ubicacionInicial;
 
-  const SeleccionarUbicacionScreen({Key? key, this.ubicacionInicial})
-      : super(key: key);
+  const SeleccionarUbicacionScreen({super.key, this.ubicacionInicial});
 
   @override
   _SeleccionarUbicacionScreenState createState() =>
@@ -51,7 +50,9 @@ class _SeleccionarUbicacionScreenState
       }
 
       final position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+          ));
       final nuevaUbicacion = LatLng(position.latitude, position.longitude);
       setState(() => _ubicacionActual = nuevaUbicacion);
       _mapController.move(nuevaUbicacion, 16.0);
@@ -107,8 +108,8 @@ class _SeleccionarUbicacionScreenState
             top: 16,
             left: 16,
             right: 16,
-            child: Card(
-              color: Colors.white.withOpacity(0.92),
+              child: Card(
+              color: Colors.white.withValues(alpha: 0.92),
               child: Padding(
                 padding: const EdgeInsets.all(12.0),
                 child: _isLoadingLocation

@@ -1,11 +1,16 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/data_service.dart';
+import '../widgets/sign_in_button.dart';
 import 'vinculacion_screen.dart';
 import 'completar_perfil_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -13,9 +18,11 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStateMixin {
   final AuthService _authService = AuthService();
+  final DataService _dataService = DataService();
   bool _isLoading = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  StreamSubscription<AuthResponse>? _authSubscription;
 
   @override
   void initState() {
@@ -28,52 +35,91 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
       CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
     );
     _animationController.forward();
+
+    _initAuth();
   }
 
-  final DataService _dataService = DataService();
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _signInWithGoogle() async {
-    setState(() {
-      _isLoading = true;
-    });
+  Future<void> _initAuth() async {
     try {
-      await _authService.signInWithGoogle();
-      if (!mounted) return;
-
-      // Verificar si tiene datos de perfil (Supabase o local)
-      final tienePerfil = await _dataService.tienePerfil();
-      final tienePerfilLocal = await _dataService.getPerfilLocal() != null;
-      if (!mounted) return;
-
-      final nav = Navigator.of(context);
-      if (!tienePerfil && !tienePerfilLocal) {
-        nav.pushReplacement(
-          MaterialPageRoute(builder: (_) => const CompletarPerfilScreen()),
-        );
-      } else {
-        nav.pushReplacement(
-          MaterialPageRoute(builder: (_) => const VinculacionScreen()),
+      await _authService.init();
+      if (kIsWeb) {
+        _authSubscription = _authService.authResponseStream.listen(
+          _onAuthSuccess,
+          onError: _onAuthError,
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error al iniciar sesión: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Error al inicializar: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    _authService.dispose();
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signInWithGoogle() async {
+    if (kIsWeb) {
+      setState(() => _isLoading = true);
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      await _authService.signInWithGoogle();
+      if (!mounted) return;
+      await _navigateAfterSignIn();
+    } catch (e) {
+      if (mounted) _showError(e);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _navigateAfterSignIn() async {
+    final tienePerfil = await _dataService.tienePerfil();
+    final tienePerfilLocal = await _dataService.getPerfilLocal() != null;
+    if (!mounted) return;
+
+    final nav = Navigator.of(context);
+    if (!tienePerfil && !tienePerfilLocal) {
+      nav.pushReplacement(
+        MaterialPageRoute(builder: (_) => const CompletarPerfilScreen()),
+      );
+    } else {
+      nav.pushReplacement(
+        MaterialPageRoute(builder: (_) => const VinculacionScreen()),
+      );
+    }
+  }
+
+  void _onAuthSuccess(AuthResponse response) {
+    if (!mounted) return;
+    _navigateAfterSignIn();
+  }
+
+  void _onAuthError(Object error) {
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+    _showError(error);
+  }
+
+  void _showError(Object e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Error al iniciar sesión: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 
   @override
@@ -95,11 +141,11 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
           // Subtle, transparent pattern of floating arrows
           Positioned(
             top: 250, right: -40,
-            child: Icon(Icons.arrow_upward_rounded, size: 160, color: Colors.white.withOpacity(0.04)),
+            child: Icon(Icons.arrow_upward_rounded, size: 160, color: Colors.white.withValues(alpha: 0.04)),
           ),
           Positioned(
             bottom: -30, right: 30,
-            child: Icon(Icons.arrow_circle_up, size: 140, color: Colors.white.withOpacity(0.04)),
+            child: Icon(Icons.arrow_circle_up, size: 140, color: Colors.white.withValues(alpha: 0.04)),
           ),
 
           // Main Content
@@ -152,7 +198,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       // Tarjeta de Login (Clean white card with soft shadows)
                       Card(
                         elevation: 12,
-                        shadowColor: Colors.black.withOpacity(0.4),
+                        shadowColor: Colors.black.withValues(alpha: 0.4),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
                         color: Colors.white,
                         child: Padding(
@@ -175,30 +221,8 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                               // Iniciar Sesión Button (Google)
                               _isLoading
                                   ? const Center(child: CircularProgressIndicator(color: Color(0xFF3B82F6)))
-                                  : SizedBox(
-                                      height: 56,
-                                      child: OutlinedButton.icon(
-                                        onPressed: _signInWithGoogle,
-                                        icon: Image.asset(
-                                          'assets/google.png',
-                                          height: 24,
-                                        ),
-                                        label: const Text(
-                                          'Continuar con Google',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.black87,
-                                          ),
-                                        ),
-                                        style: OutlinedButton.styleFrom(
-                                          side: const BorderSide(color: Colors.grey, width: 1),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(16),
-                                          ),
-                                          backgroundColor: Colors.white,
-                                        ),
-                                      ),
+                                  : buildGoogleSignInButton(
+                                      onPressed: _signInWithGoogle,
                                     ),
                             ],
                           ),
@@ -213,7 +237,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                             decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.8),
+                              color: Colors.red.withValues(alpha: 0.8),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: const Text(

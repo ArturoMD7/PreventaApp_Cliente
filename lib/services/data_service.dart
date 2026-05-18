@@ -7,17 +7,15 @@ import '../models/negocio.dart';
 class DataService {
   final SupabaseClient _supabase = Supabase.instance.client;
   static const String _providerKey = 'provider_id';
+  static const String _vinculacionSkippedKey = 'vinculacion_skipped';
 
-  // Claves de perfil local (para guardar antes de vincular tienda)
   static const String _nombreKey = 'perfil_nombre';
   static const String _telefonoKey = 'perfil_telefono';
   static const String _direccionKey = 'perfil_direccion';
   static const String _latitudKey = 'perfil_latitud';
   static const String _longitudKey = 'perfil_longitud';
 
-  // ─────────────────────────────────────────────────────────────
-  // SharedPreferences: proveedor activo
-  // ─────────────────────────────────────────────────────────────
+  // ── SharedPreferences: proveedor activo ──
 
   Future<void> setProviderId(String id) async {
     final prefs = await SharedPreferences.getInstance();
@@ -34,11 +32,25 @@ class DataService {
     await prefs.remove(_providerKey);
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // SharedPreferences: perfil local (antes de vincular tienda)
-  // ─────────────────────────────────────────────────────────────
+  // ── SharedPreferences: vinculación skip ──
 
-  /// Guarda los datos del perfil localmente. Se usan al vincular tiendas.
+  Future<void> setVinculacionSkipped() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_vinculacionSkippedKey, true);
+  }
+
+  Future<bool> hasVinculacionSkipped() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_vinculacionSkippedKey) ?? false;
+  }
+
+  Future<void> clearVinculacionSkipped() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_vinculacionSkippedKey);
+  }
+
+  // ── SharedPreferences: perfil local ──
+
   Future<void> guardarPerfilLocal({
     required String nombre,
     String? telefono,
@@ -54,7 +66,6 @@ class DataService {
     if (longitud != null) await prefs.setDouble(_longitudKey, longitud);
   }
 
-  /// Lee el perfil local (de SharedPreferences). Retorna null si no hay datos.
   Future<Map<String, dynamic>?> getPerfilLocal() async {
     final prefs = await SharedPreferences.getInstance();
     final nombre = prefs.getString(_nombreKey);
@@ -68,137 +79,156 @@ class DataService {
     };
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // NEGOCIO (tienda activa)
-  // ─────────────────────────────────────────────────────────────
+  // ── NEGOCIO ──
 
   Future<Negocio?> getNegocio() async {
-    final providerId = await getProviderId();
-    if (providerId == null) return null;
+    try {
+      final providerId = await getProviderId();
+      if (providerId == null) return null;
 
-    final response = await _supabase
-        .from('negocios')
-        .select()
-        .eq('id', providerId)
-        .maybeSingle();
+      final response = await _supabase
+          .from('negocios')
+          .select()
+          .eq('id', providerId)
+          .maybeSingle();
 
-    return response != null ? Negocio.fromMap(response) : null;
+      return response != null ? Negocio.fromMap(response) : null;
+    } catch (e) {
+      throw Exception('Error al obtener negocio: $e');
+    }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // MÚLTIPLES TIENDAS
-  // ─────────────────────────────────────────────────────────────
+  // ── MÚLTIPLES TIENDAS ──
 
   Future<List<Map<String, dynamic>>> getLinkedProviders() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return [];
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return [];
 
-    final clienteRows = await _supabase
-        .from('clientes')
-        .select('user_id')
-        .eq('telefono', userId);
+      final clienteRows = await _supabase
+          .from('clientes')
+          .select('user_id')
+          .eq('telefono', userId);
 
-    if ((clienteRows as List).isEmpty) return [];
+      if ((clienteRows as List).isEmpty) return [];
 
-    final providerIds =
-        clienteRows.map((c) => c['user_id'] as String).toSet().toList();
+      final providerIds =
+          clienteRows.map((c) => c['user_id'] as String).toSet().toList();
 
-    final negocios = await _supabase
-        .from('negocios')
-        .select()
-        .inFilter('id', providerIds);
+      final negocios = await _supabase
+          .from('negocios')
+          .select()
+          .inFilter('id', providerIds);
 
-    return (negocios as List).cast<Map<String, dynamic>>();
+      return (negocios as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      throw Exception('Error al obtener proveedores vinculados: $e');
+    }
   }
 
   Future<void> desvincularProveedor(String providerId) async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return;
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
 
-    await _supabase
-        .from('clientes')
-        .delete()
-        .eq('user_id', providerId)
-        .eq('telefono', userId);
+      await _supabase
+          .from('clientes')
+          .delete()
+          .eq('user_id', providerId)
+          .eq('telefono', userId);
+    } catch (e) {
+      throw Exception('Error al desvincular proveedor: $e');
+    }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // PRODUCTOS Y CATEGORÍAS
-  // ─────────────────────────────────────────────────────────────
+  // ── PRODUCTOS Y CATEGORÍAS ──
 
   Future<List<Producto>> getProductos() async {
-    final providerId = await getProviderId();
-    if (providerId == null) return [];
+    try {
+      final providerId = await getProviderId();
+      if (providerId == null) return [];
 
-    final response = await _supabase
-        .from('productos')
-        .select()
-        .eq('user_id', providerId)
-        .order('nombre', ascending: true);
+      final response = await _supabase
+          .from('productos')
+          .select()
+          .eq('user_id', providerId)
+          .order('nombre', ascending: true);
 
-    return (response as List).map((map) => Producto.fromMap(map)).toList();
+      return (response as List).map((map) => Producto.fromMap(map)).toList();
+    } on PostgrestException catch (e) {
+      throw Exception('Error de base de datos al obtener productos: ${e.message}');
+    } catch (e) {
+      throw Exception('Error al obtener productos: $e');
+    }
   }
 
   Future<List<Categoria>> getCategorias() async {
-    final providerId = await getProviderId();
-    if (providerId == null) return [];
+    try {
+      final providerId = await getProviderId();
+      if (providerId == null) return [];
 
-    final response = await _supabase
-        .from('categorias')
-        .select()
-        .eq('user_id', providerId)
-        .order('nombre', ascending: true);
+      final response = await _supabase
+          .from('categorias')
+          .select()
+          .eq('user_id', providerId)
+          .order('nombre', ascending: true);
 
-    return (response as List).map((map) => Categoria.fromMap(map)).toList();
-  }
-
-  // ─────────────────────────────────────────────────────────────
-  // PERFIL DEL CLIENTE (en Supabase)
-  // ─────────────────────────────────────────────────────────────
-
-  /// Retorna true si el usuario ya tiene al menos un registro en `clientes`
-  Future<bool> tienePerfil() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return false;
-
-    final row = await _supabase
-        .from('clientes')
-        .select('id')
-        .eq('telefono', userId)
-        .limit(1)
-        .maybeSingle();
-
-    return row != null;
-  }
-
-  /// Obtiene el perfil del usuario desde Supabase (cualquier tienda vinculada)
-  /// Si no hay en Supabase, regresa el perfil local guardado en SharedPreferences.
-  Future<Map<String, dynamic>?> getMiPerfil() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return null;
-
-    final row = await _supabase
-        .from('clientes')
-        .select()
-        .eq('telefono', userId)
-        .limit(1)
-        .maybeSingle();
-
-    if (row != null) {
-      return {
-        'nombre': row['nombre'],
-        'telefono_real': row['telefono_real'] ?? '',
-        'direccion': row['direccion'],
-        'latitud': row['latitud'],
-        'longitud': row['longitud'],
-      };
+      return (response as List).map((map) => Categoria.fromMap(map)).toList();
+    } on PostgrestException catch (e) {
+      throw Exception('Error de base de datos al obtener categorías: ${e.message}');
+    } catch (e) {
+      throw Exception('Error al obtener categorías: $e');
     }
-
-    // Fallback: perfil guardado localmente antes de vincular
-    return getPerfilLocal();
   }
 
-  /// Registra al cliente en la tienda de un proveedor (idempotente).
+  // ── PERFIL DEL CLIENTE ──
+
+  Future<bool> tienePerfil() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return false;
+
+      final row = await _supabase
+          .from('clientes')
+          .select('id')
+          .eq('telefono', userId)
+          .limit(1)
+          .maybeSingle();
+
+      return row != null;
+    } catch (e) {
+      throw Exception('Error al verificar perfil: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>?> getMiPerfil() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return null;
+
+      final row = await _supabase
+          .from('clientes')
+          .select()
+          .eq('telefono', userId)
+          .limit(1)
+          .maybeSingle();
+
+      if (row != null) {
+        return {
+          'nombre': row['nombre'],
+          'telefono_real': row['telefono_real'] ?? '',
+          'direccion': row['direccion'],
+          'latitud': row['latitud'],
+          'longitud': row['longitud'],
+        };
+      }
+
+      return getPerfilLocal();
+    } catch (e) {
+      throw Exception('Error al obtener perfil: $e');
+    }
+  }
+
   Future<void> registrarClienteEnTienda({
     required String providerId,
     required String nombre,
@@ -207,32 +237,35 @@ class DataService {
     double? latitud,
     double? longitud,
   }) async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) throw Exception('No has iniciado sesión');
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('No has iniciado sesión');
 
-    // Verificar si ya está registrado en esta tienda
-    final existente = await _supabase
-        .from('clientes')
-        .select('id')
-        .eq('user_id', providerId)
-        .eq('telefono', userId)
-        .maybeSingle();
+      final existente = await _supabase
+          .from('clientes')
+          .select('id')
+          .eq('user_id', providerId)
+          .eq('telefono', userId)
+          .maybeSingle();
 
-    if (existente != null) return; // Ya registrado — no duplicar
+      if (existente != null) return;
 
-    // Insertar nuevo registro
-    await _supabase.from('clientes').insert({
-      'user_id': providerId,   // ID del proveedor
-      'nombre': nombre,
-      'telefono': userId,      // UUID del cliente como identificador único
-      'telefono_real': telefonoReal?.isNotEmpty == true ? telefonoReal : null,
-      'direccion': direccion?.isNotEmpty == true ? direccion : null,
-      'latitud': latitud,
-      'longitud': longitud,
-    });
+      await _supabase.from('clientes').insert({
+        'user_id': providerId,
+        'nombre': nombre,
+        'telefono': userId,
+        'telefono_real': telefonoReal?.isNotEmpty == true ? telefonoReal : null,
+        'direccion': direccion?.isNotEmpty == true ? direccion : null,
+        'latitud': latitud,
+        'longitud': longitud,
+      });
+    } on PostgrestException catch (e) {
+      throw Exception('Error al registrar cliente: ${e.message}');
+    } catch (e) {
+      throw Exception('Error al registrar cliente en tienda: $e');
+    }
   }
 
-  /// Actualiza el perfil en TODOS los registros de clientes del usuario
   Future<void> updateProfile({
     required String nombre,
     String? telefono,
@@ -240,161 +273,167 @@ class DataService {
     double? latitud,
     double? longitud,
   }) async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) throw Exception('No has iniciado sesión');
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('No has iniciado sesión');
 
-    await _supabase
-        .from('clientes')
-        .update({
-          'nombre': nombre,
-          'telefono_real': telefono,
-          'direccion': direccion,
-          'latitud': latitud,
-          'longitud': longitud,
-        })
-        .eq('telefono', userId);
+      await _supabase
+          .from('clientes')
+          .update({
+            'nombre': nombre,
+            'telefono_real': telefono,
+            'direccion': direccion,
+            'latitud': latitud,
+            'longitud': longitud,
+          })
+          .eq('telefono', userId);
 
-    // También actualizar perfil local
-    await guardarPerfilLocal(
-      nombre: nombre,
-      telefono: telefono,
-      direccion: direccion,
-      latitud: latitud,
-      longitud: longitud,
-    );
+      await guardarPerfilLocal(
+        nombre: nombre,
+        telefono: telefono,
+        direccion: direccion,
+        latitud: latitud,
+        longitud: longitud,
+      );
+    } catch (e) {
+      throw Exception('Error al actualizar perfil: $e');
+    }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // PEDIDOS
-  // ─────────────────────────────────────────────────────────────
+  // ── PEDIDOS ──
 
   Future<List<Map<String, dynamic>>> getMisPedidos() async {
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) return [];
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return [];
 
-    final clienteRows = await _supabase
-        .from('clientes')
-        .select('id')
-        .eq('telefono', userId);
+      final clienteRows = await _supabase
+          .from('clientes')
+          .select('id')
+          .eq('telefono', userId);
 
-    if ((clienteRows as List).isEmpty) return [];
+      if ((clienteRows as List).isEmpty) return [];
 
-    final clienteIds = clienteRows.map((c) => c['id'] as String).toList();
+      final clienteIds = clienteRows.map((c) => c['id'] as String).toList();
 
-    // 1. Traer ventas sin el join de negocios (no hay FK directa entre ventas y negocios)
-    final ventas = await _supabase
-        .from('ventas')
-        .select('*')
-        .inFilter('cliente_id', clienteIds)
-        .order('fecha', ascending: false);
+      final ventas = await _supabase
+          .from('ventas')
+          .select('*')
+          .inFilter('cliente_id', clienteIds)
+          .order('fecha', ascending: false);
 
-    final ventasList = (ventas as List).cast<Map<String, dynamic>>();
-    if (ventasList.isEmpty) return [];
+      final ventasList = (ventas as List).cast<Map<String, dynamic>>();
+      if (ventasList.isEmpty) return [];
 
-    // 2. Obtener los nombres de los negocios por sus IDs (user_id de la venta = id del negocio)
-    final providerIds =
-        ventasList.map((v) => v['user_id'] as String).toSet().toList();
+      final providerIds =
+          ventasList.map((v) => v['user_id'] as String).toSet().toList();
 
-    final negociosRows = await _supabase
-        .from('negocios')
-        .select('id, nombre_negocio')
-        .inFilter('id', providerIds);
+      final negociosRows = await _supabase
+          .from('negocios')
+          .select('id, nombre_negocio')
+          .inFilter('id', providerIds);
 
-    final Map<String, String> negocioNombres = {
-      for (var n in negociosRows as List)
-        n['id'] as String: (n['nombre_negocio'] as String?) ?? 'Tienda'
-    };
-
-    // 3. Fusionar: agregar 'negocios' como mapa anidado igual que haría Supabase
-    return ventasList.map((v) {
-      return {
-        ...v,
-        'negocios': {
-          'nombre_negocio': negocioNombres[v['user_id']] ?? 'Tienda',
-        },
+      final Map<String, String> negocioNombres = {
+        for (var n in negociosRows as List)
+          n['id'] as String: (n['nombre_negocio'] as String?) ?? 'Tienda'
       };
-    }).toList();
+
+      return ventasList.map((v) {
+        return {
+          ...v,
+          'negocios': {
+            'nombre_negocio': negocioNombres[v['user_id']] ?? 'Tienda',
+          },
+        };
+      }).toList();
+    } catch (e) {
+      throw Exception('Error al obtener pedidos: $e');
+    }
   }
 
   Future<List<Map<String, dynamic>>> getDetallesPedido(String ventaId) async {
-    final detalles = await _supabase
-        .from('detalles_venta')
-        .select('*, productos(nombre)')
-        .eq('venta_id', ventaId);
+    try {
+      final detalles = await _supabase
+          .from('detalles_venta')
+          .select('*, productos(nombre)')
+          .eq('venta_id', ventaId);
 
-    return (detalles as List).cast<Map<String, dynamic>>();
+      return (detalles as List).cast<Map<String, dynamic>>();
+    } catch (e) {
+      throw Exception('Error al obtener detalles del pedido: $e');
+    }
   }
 
-  // ─────────────────────────────────────────────────────────────
-  // HACER PEDIDO
-  // ─────────────────────────────────────────────────────────────
+  // ── HACER PEDIDO ──
 
   Future<void> hacerPedido(
       List<Map<String, dynamic>> items, double total) async {
-    final providerId = await getProviderId();
-    if (providerId == null) throw Exception('No hay proveedor vinculado');
+    try {
+      final providerId = await getProviderId();
+      if (providerId == null) throw Exception('No hay proveedor vinculado');
 
-    final userId = _supabase.auth.currentUser?.id;
-    if (userId == null) throw Exception('No has iniciado sesión');
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('No has iniciado sesión');
 
-    // Buscar registro de cliente en esta tienda
-    var clienteRes = await _supabase
-        .from('clientes')
-        .select('id')
-        .eq('user_id', providerId)
-        .eq('telefono', userId)
-        .maybeSingle();
-
-    if (clienteRes == null) {
-      // Registrar con datos del perfil
-      final perfil = await getMiPerfil();
-      final nombre = perfil?['nombre'] ??
-          _supabase.auth.currentUser?.userMetadata?['full_name'] ??
-          'Cliente';
-
-      await registrarClienteEnTienda(
-        providerId: providerId,
-        nombre: nombre,
-        telefonoReal: perfil?['telefono_real'],
-        direccion: perfil?['direccion'],
-        latitud: (perfil?['latitud'] as num?)?.toDouble(),
-        longitud: (perfil?['longitud'] as num?)?.toDouble(),
-      );
-
-      clienteRes = await _supabase
+      var clienteRes = await _supabase
           .from('clientes')
           .select('id')
           .eq('user_id', providerId)
           .eq('telefono', userId)
-          .single();
-    }
+          .maybeSingle();
 
-    final clienteId = clienteRes['id'] as String;
+      if (clienteRes == null) {
+        final perfil = await getMiPerfil();
+        final nombre = perfil?['nombre'] ??
+            _supabase.auth.currentUser?.userMetadata?['full_name'] ??
+            'Cliente';
 
-    // Insertar venta
-    final ventaRes = await _supabase.from('ventas').insert({
-      'user_id': providerId,
-      'cliente_id': clienteId,
-      'fecha': DateTime.now().toIso8601String(),
-      'total': total,
-      'estado': 'pendiente',
-    }).select().single();
+        await registrarClienteEnTienda(
+          providerId: providerId,
+          nombre: nombre,
+          telefonoReal: perfil?['telefono_real'],
+          direccion: perfil?['direccion'],
+          latitud: (perfil?['latitud'] as num?)?.toDouble(),
+          longitud: (perfil?['longitud'] as num?)?.toDouble(),
+        );
 
-    final ventaId = ventaRes['id'];
+        clienteRes = await _supabase
+            .from('clientes')
+            .select('id')
+            .eq('user_id', providerId)
+            .eq('telefono', userId)
+            .single();
+      }
 
-    // Insertar detalles
-    for (var item in items) {
-      final Producto prod = item['producto'];
-      final int cantidad = item['cantidad'];
-      final double subtotal = prod.precio * cantidad;
+      final clienteId = clienteRes['id'] as String;
 
-      await _supabase.from('detalles_venta').insert({
-        'venta_id': ventaId,
-        'producto_id': prod.id,
-        'cantidad': cantidad,
-        'precio_unitario': prod.precio,
-        'subtotal': subtotal,
-      });
+      final ventaRes = await _supabase.from('ventas').insert({
+        'user_id': providerId,
+        'cliente_id': clienteId,
+        'fecha': DateTime.now().toIso8601String(),
+        'total': total,
+        'estado': 'pendiente',
+      }).select().single();
+
+      final ventaId = ventaRes['id'];
+
+      for (final item in items) {
+        final Producto prod = item['producto'];
+        final int cantidad = item['cantidad'];
+        final double subtotal = prod.precio * cantidad;
+
+        await _supabase.from('detalles_venta').insert({
+          'venta_id': ventaId,
+          'producto_id': prod.id,
+          'cantidad': cantidad,
+          'precio_unitario': prod.precio,
+          'subtotal': subtotal,
+        });
+      }
+    } on PostgrestException catch (e) {
+      throw Exception('Error de base de datos al crear pedido: ${e.message}');
+    } catch (e) {
+      throw Exception('Error al hacer pedido: $e');
     }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/auth_service.dart';
 import '../services/data_service.dart';
 import '../models/producto.dart';
 import '../models/categoria.dart';
@@ -11,7 +12,7 @@ import 'stores_screen.dart';
 import 'order_history_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -48,24 +49,25 @@ class _HomeScreenState extends State<HomeScreen> {
       _emailUsuario = user?.email ?? '';
       _avatarUrl = user?.userMetadata?['avatar_url'] as String?;
 
-      final negocio = await _dataService.getNegocio();
-      if (negocio == null) {
-        await _dataService.clearProviderId();
-        if (mounted) {
-          Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const VinculacionScreen()));
-        }
-        return;
-      }
-
-      final productos = await _dataService.getProductos();
-      final categorias = await _dataService.getCategorias();
-
       // Cargar nombre del perfil
       final perfil = await _dataService.getMiPerfil();
       _nombreUsuario = perfil?['nombre'] ??
           user?.userMetadata?['full_name'] ??
           'Mi perfil';
+
+      final negocio = await _dataService.getNegocio();
+      if (negocio == null) {
+        setState(() {
+          _negocio = null;
+          _productos = [];
+          _categorias = [];
+          _productosFiltrados = [];
+        });
+        return;
+      }
+
+      final productos = await _dataService.getProductos();
+      final categorias = await _dataService.getCategorias();
 
       setState(() {
         _negocio = negocio;
@@ -396,7 +398,7 @@ class _HomeScreenState extends State<HomeScreen> {
             title: const Text('Cerrar Sesión',
                 style: TextStyle(color: Colors.red)),
             onTap: () async {
-              await Supabase.instance.client.auth.signOut();
+              await AuthService().signOut();
               if (mounted) {
                 Navigator.of(context).pushReplacement(
                     MaterialPageRoute(builder: (_) => const LoginScreen()));
@@ -409,6 +411,95 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildSinProveedor() {
+    return Column(
+      children: [
+        // Banner persistente de recordatorio
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.orange.shade200),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.orange.shade700, size: 22),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'No tienes ningún proveedor vinculado. Agrega al menos uno para ver productos y hacer pedidos.',
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Estado vacío centrado
+        Expanded(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.storefront_outlined,
+                      size: 80, color: Colors.grey.shade300),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Sin proveedor',
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black54),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Vincula un proveedor para acceder a su catálogo de productos y empezar a hacer tus pedidos.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 14, color: Colors.black45),
+                  ),
+                  const SizedBox(height: 32),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const VinculacionScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.link),
+                    label: const Text('Vincular un proveedor'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const StoresScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.store_outlined, size: 18),
+                    label: const Text('Ir a Mis Tiendas'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     int totalItemsCarrito = _carrito.values
@@ -417,7 +508,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       drawer: _buildDrawer(),
       appBar: AppBar(
-        title: Text(_negocio?.nombreNegocio ?? 'Catálogo'),
+        title: Text(_negocio?.nombreNegocio ?? 'Sin proveedor'),
         actions: [
           // Cambio rápido de tienda
           IconButton(
@@ -431,190 +522,194 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _mostrarCarrito,
-        icon: const Icon(Icons.shopping_cart),
-        label: Text('Carrito ($totalItemsCarrito)'),
-      ),
+      floatingActionButton: _negocio != null
+          ? FloatingActionButton.extended(
+              onPressed: _mostrarCarrito,
+              icon: const Icon(Icons.shopping_cart),
+              label: Text('Carrito ($totalItemsCarrito)'),
+            )
+          : null,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Barra de búsqueda
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Buscar producto...',
-                      prefixIcon: Icon(Icons.search),
-                    ),
-                    onChanged: (val) {
-                      _filtroBusqueda = val;
-                      _aplicarFiltros();
-                    },
-                  ),
-                ),
-
-                // Categorías
-                if (_categorias.isNotEmpty)
-                  SizedBox(
-                    height: 50,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            label: const Text('Todas'),
-                            selected: _categoriaSeleccionada == null ||
-                                _categoriaSeleccionada == 'Todas',
-                            onSelected: (selected) {
-                              setState(() {
-                                _categoriaSeleccionada = 'Todas';
-                                _aplicarFiltros();
-                              });
-                            },
-                          ),
+          : _negocio == null
+              ? _buildSinProveedor()
+              : Column(
+                  children: [
+                    // Barra de búsqueda
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: TextField(
+                        decoration: const InputDecoration(
+                          labelText: 'Buscar producto...',
+                          prefixIcon: Icon(Icons.search),
                         ),
-                        ..._categorias.map(
-                          (cat) => Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(cat.nombre),
-                              selected: _categoriaSeleccionada == cat.id,
-                              onSelected: (selected) {
-                                setState(() {
-                                  _categoriaSeleccionada =
-                                      selected ? cat.id : 'Todas';
-                                  _aplicarFiltros();
-                                });
-                              },
+                        onChanged: (val) {
+                          _filtroBusqueda = val;
+                          _aplicarFiltros();
+                        },
+                      ),
+                    ),
+
+                    // Categorías
+                    if (_categorias.isNotEmpty)
+                      SizedBox(
+                        height: 50,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                label: const Text('Todas'),
+                                selected: _categoriaSeleccionada == null ||
+                                    _categoriaSeleccionada == 'Todas',
+                                onSelected: (selected) {
+                                  setState(() {
+                                    _categoriaSeleccionada = 'Todas';
+                                    _aplicarFiltros();
+                                  });
+                                },
+                              ),
                             ),
-                          ),
+                            ..._categorias.map(
+                              (cat) => Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  label: Text(cat.nombre),
+                                  selected: _categoriaSeleccionada == cat.id,
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      _categoriaSeleccionada =
+                                          selected ? cat.id : 'Todas';
+                                      _aplicarFiltros();
+                                    });
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
 
-                const SizedBox(height: 8),
+                    const SizedBox(height: 8),
 
-                // Grid de Productos
-                Expanded(
-                  child: _productosFiltrados.isEmpty
-                      ? const Center(
-                          child: Text('No se encontraron productos'))
-                      : GridView.builder(
-                          padding: const EdgeInsets.all(16),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            childAspectRatio: 0.75,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 16,
-                          ),
-                          itemCount: _productosFiltrados.length,
-                          itemBuilder: (context, index) {
-                            final prod = _productosFiltrados[index];
-                            final enCarrito =
-                                _carrito.containsKey(prod.id)
-                                    ? _carrito[prod.id]!['cantidad'] as int
-                                    : 0;
+                    // Grid de Productos
+                    Expanded(
+                      child: _productosFiltrados.isEmpty
+                          ? const Center(
+                              child: Text('No se encontraron productos'))
+                          : GridView.builder(
+                              padding: const EdgeInsets.all(16),
+                              gridDelegate:
+                                  const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                childAspectRatio: 0.75,
+                                crossAxisSpacing: 16,
+                                mainAxisSpacing: 16,
+                              ),
+                              itemCount: _productosFiltrados.length,
+                              itemBuilder: (context, index) {
+                                final prod = _productosFiltrados[index];
+                                final enCarrito =
+                                    _carrito.containsKey(prod.id)
+                                        ? _carrito[prod.id]!['cantidad'] as int
+                                        : 0;
 
-                            return Card(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.stretch,
-                                children: [
-                                  Expanded(
-                                    child: Stack(
-                                      children: [
-                                        Container(
-                                          decoration: BoxDecoration(
-                                            color: Colors.grey.shade100,
-                                            borderRadius:
-                                                const BorderRadius.vertical(
-                                                    top: Radius.circular(16)),
-                                          ),
-                                          child: const Center(
-                                            child: Icon(Icons.image,
-                                                size: 64,
-                                                color: Colors.grey),
-                                          ),
-                                        ),
-                                        if (enCarrito > 0)
-                                          Positioned(
-                                            top: 8,
-                                            right: 8,
-                                            child: Container(
-                                              width: 28,
-                                              height: 28,
+                                return Card(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Expanded(
+                                        child: Stack(
+                                          children: [
+                                            Container(
                                               decoration: BoxDecoration(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .primary,
-                                                shape: BoxShape.circle,
+                                                color: Colors.grey.shade100,
+                                                borderRadius:
+                                                    const BorderRadius.vertical(
+                                                        top: Radius.circular(16)),
                                               ),
-                                              child: Center(
-                                                child: Text(
-                                                  '$enCarrito',
-                                                  style: const TextStyle(
-                                                      color: Colors.white,
-                                                      fontWeight:
-                                                          FontWeight.bold,
-                                                      fontSize: 13),
-                                                ),
+                                              child: const Center(
+                                                child: Icon(Icons.image,
+                                                    size: 64,
+                                                    color: Colors.grey),
                                               ),
                                             ),
-                                          ),
-                                      ],
-                                    ),
+                                            if (enCarrito > 0)
+                                              Positioned(
+                                                top: 8,
+                                                right: 8,
+                                                child: Container(
+                                                  width: 28,
+                                                  height: 28,
+                                                  decoration: BoxDecoration(
+                                                    color: Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
+                                                    shape: BoxShape.circle,
+                                                  ),
+                                                  child: Center(
+                                                    child: Text(
+                                                      '$enCarrito',
+                                                      style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                          fontSize: 13),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      Padding(
+                                        padding: const EdgeInsets.all(12.0),
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              prod.nombre,
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '\$${prod.precio.toStringAsFixed(2)}',
+                                              style: const TextStyle(
+                                                  color: Colors.blue,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 18),
+                                            ),
+                                            const SizedBox(height: 10),
+                                            ElevatedButton(
+                                              onPressed: () =>
+                                                  _agregarAlCarrito(prod),
+                                              style: ElevatedButton.styleFrom(
+                                                minimumSize:
+                                                    const Size(double.infinity, 36),
+                                                padding: const EdgeInsets.symmetric(
+                                                    vertical: 8),
+                                              ),
+                                              child: const Text('Agregar'),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  Padding(
-                                    padding: const EdgeInsets.all(12.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          prod.nombre,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 15),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '\$${prod.precio.toStringAsFixed(2)}',
-                                          style: const TextStyle(
-                                              color: Colors.blue,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18),
-                                        ),
-                                        const SizedBox(height: 10),
-                                        ElevatedButton(
-                                          onPressed: () =>
-                                              _agregarAlCarrito(prod),
-                                          style: ElevatedButton.styleFrom(
-                                            minimumSize:
-                                                const Size(double.infinity, 36),
-                                            padding: const EdgeInsets.symmetric(
-                                                vertical: 8),
-                                          ),
-                                          child: const Text('Agregar'),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
     );
   }
 }

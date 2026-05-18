@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/auth_service.dart';
 import '../services/data_service.dart';
 import 'home_screen.dart';
+import 'login_screen.dart';
 
 class VinculacionScreen extends StatefulWidget {
   /// Si [isAdding] es true, se muestra como pantalla de "agregar tienda"
@@ -42,7 +44,8 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
 
     setState(() => _isLoading = true);
     try {
-      // Verificar si ya está registrado en esa tienda
+      await _dataService.clearVinculacionSkipped();
+
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId != null) {
         final existente = await Supabase.instance.client
@@ -53,7 +56,6 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
             .maybeSingle();
 
         if (existente == null) {
-          // Tiene el proveedor guardado pero nunca quedó registrado → registrar ahora
           final perfil = await _dataService.getMiPerfil();
           if (perfil != null) {
             await _dataService.registrarClienteEnTienda(
@@ -72,12 +74,12 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
       }
 
       if (mounted) {
-        Navigator.of(context).pushReplacement(
+        Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
         );
       }
     } catch (e) {
-      // Si falla, simplemente mostrar la pantalla de vinculación
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -126,8 +128,9 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
         longitud: (perfil?['longitud'] as num?)?.toDouble(),
       );
 
-      // 4. Guardar proveedor activo
+      // 4. Guardar proveedor activo y limpiar bandera de omisión
       await _dataService.setProviderId(codigo);
+      await _dataService.clearVinculacionSkipped();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -137,10 +140,11 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
         );
 
         if (widget.isAdding) {
-          Navigator.of(context).pop();
+          Navigator.of(context).pop(true);
         } else {
-          Navigator.of(context).pushReplacement(
+          Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(builder: (_) => const HomeScreen()),
+            (route) => false,
           );
         }
       }
@@ -155,6 +159,46 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
     }
   }
 
+  Future<void> _omitirVinculacion() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded,
+            size: 48, color: Colors.orange),
+        title: const Text('Omitir vinculación'),
+        content: const Text(
+          'Para ver productos y hacer pedidos necesitas vincularte '
+          'con al menos un proveedor.\n\n'
+          'Puedes hacerlo más tarde desde "Mis Tiendas" en el menú lateral. '
+          'Te recordaremos agregar un proveedor en la pantalla principal.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Omitir por ahora'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    await _dataService.setVinculacionSkipped();
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const HomeScreen()),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -165,7 +209,12 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
             IconButton(
               icon: const Icon(Icons.logout),
               onPressed: () async {
-                await Supabase.instance.client.auth.signOut();
+                await AuthService().signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                }
               },
             ),
         ],
@@ -211,12 +260,24 @@ class _VinculacionScreenState extends State<VinculacionScreen> {
               const SizedBox(height: 24),
               _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : ElevatedButton.icon(
-                      onPressed: _vincular,
-                      icon: const Icon(Icons.link),
-                      label: Text(widget.isAdding
-                          ? 'Vincular nueva tienda'
-                          : 'Vincular y Entrar'),
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _vincular,
+                          icon: const Icon(Icons.link),
+                          label: Text(widget.isAdding
+                              ? 'Vincular nueva tienda'
+                              : 'Vincular y Entrar'),
+                        ),
+                        if (!widget.isAdding) ...[
+                          const SizedBox(height: 12),
+                          OutlinedButton(
+                            onPressed: _omitirVinculacion,
+                            child: const Text('Omitir por ahora'),
+                          ),
+                        ],
+                      ],
                     ),
             ],
           ),

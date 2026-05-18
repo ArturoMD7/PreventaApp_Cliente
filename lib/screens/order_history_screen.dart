@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import '../services/data_service.dart';
 
 class OrderHistoryScreen extends StatefulWidget {
-  const OrderHistoryScreen({Key? key}) : super(key: key);
+  const OrderHistoryScreen({super.key});
 
   @override
   _OrderHistoryScreenState createState() => _OrderHistoryScreenState();
@@ -186,7 +186,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                                         height: 48,
                                         decoration: BoxDecoration(
                                           color: _colorEstado(estado)
-                                              .withOpacity(0.1),
+                                              .withValues(alpha: 0.1),
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(
@@ -223,7 +223,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                                                       vertical: 2),
                                               decoration: BoxDecoration(
                                                 color: _colorEstado(estado)
-                                                    .withOpacity(0.12),
+                                                    .withValues(alpha: 0.12),
                                                 borderRadius:
                                                     BorderRadius.circular(8),
                                               ),
@@ -366,7 +366,7 @@ class _DetallesPedidoSheetState extends State<_DetallesPedidoSheet> {
             const SizedBox(height: 8),
             Chip(
               label: Text(estado.replaceAll('_', ' ')),
-              backgroundColor: _estadoColor(estado).withOpacity(0.15),
+              backgroundColor: _estadoColor(estado).withValues(alpha: 0.15),
               labelStyle: TextStyle(
                   color: _estadoColor(estado),
                   fontWeight: FontWeight.w600),

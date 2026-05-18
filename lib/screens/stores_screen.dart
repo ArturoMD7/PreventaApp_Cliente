@@ -4,7 +4,7 @@ import 'home_screen.dart';
 import 'vinculacion_screen.dart';
 
 class StoresScreen extends StatefulWidget {
-  const StoresScreen({Key? key}) : super(key: key);
+  const StoresScreen({super.key});
 
   @override
   _StoresScreenState createState() => _StoresScreenState();

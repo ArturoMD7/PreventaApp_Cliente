@@ -5,17 +5,26 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'screens/login_screen.dart';
 import 'screens/vinculacion_screen.dart';
+import 'screens/home_screen.dart';
+import 'services/data_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Cargar variables de entorno
-  await dotenv.load(fileName: ".env");
 
-  // Inicializar Supabase
+  await dotenv.load(fileName: '.env');
+
+  final supabaseUrl = dotenv.env['SUPABASE_URL'];
+  final supabaseKey = dotenv.env['SUPABASE_ANON_KEY'];
+
+  if (supabaseUrl == null || supabaseKey == null) {
+    throw Exception(
+      'SUPABASE_URL y SUPABASE_ANON_KEY deben estar definidos en .env',
+    );
+  }
+
   await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    url: supabaseUrl,
+    anonKey: supabaseKey,
   );
 
   runApp(const MyApp());
@@ -32,12 +41,12 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         scaffoldBackgroundColor: Colors.grey.shade50,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1E3A8A), // Azul corporativo elegante
+          seedColor: const Color(0xFF1E3A8A),
           primary: const Color(0xFF1E3A8A),
           secondary: const Color(0xFF3B82F6),
           surface: Colors.white,
         ),
-        textTheme: GoogleFonts.interTextTheme(Theme.of(context).textTheme),
+        textTheme: GoogleFonts.interTextTheme(),
         useMaterial3: true,
         appBarTheme: const AppBarTheme(
           centerTitle: true,
@@ -45,9 +54,9 @@ class MyApp extends StatelessWidget {
           backgroundColor: Color(0xFF1E3A8A),
           foregroundColor: Colors.white,
         ),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 4,
-          shadowColor: Colors.black.withOpacity(0.1),
+          shadowColor: Colors.black.withValues(alpha: 0.1),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           color: Colors.white,
           margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
@@ -75,7 +84,7 @@ class MyApp extends StatelessWidget {
             backgroundColor: const Color(0xFF3B82F6),
             foregroundColor: Colors.white,
             elevation: 2,
-            shadowColor: const Color(0xFF3B82F6).withOpacity(0.5),
+            shadowColor: const Color(0xFF3B82F6).withValues(alpha: 0.5),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
@@ -91,7 +100,7 @@ class MyApp extends StatelessWidget {
             ),
             backgroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 24),
-            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black87),
+            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ),
         floatingActionButtonTheme: FloatingActionButtonThemeData(
@@ -101,15 +110,53 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
-      home: _getInitialScreen(),
+      home: const _AppEntryPoint(),
     );
   }
+}
 
-  Widget _getInitialScreen() {
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session == null) {
-      return const LoginScreen();
+class _AppEntryPoint extends StatefulWidget {
+  const _AppEntryPoint();
+
+  @override
+  State<_AppEntryPoint> createState() => _AppEntryPointState();
+}
+
+class _AppEntryPointState extends State<_AppEntryPoint> {
+  Widget? _initialRoute;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveInitialRoute();
+  }
+
+  Future<void> _resolveInitialRoute() async {
+    final hasSession = Supabase.instance.client.auth.currentSession != null;
+    if (!hasSession) {
+      if (mounted) setState(() => _initialRoute = const LoginScreen());
+      return;
     }
-    return const VinculacionScreen();
+
+    final dataService = DataService();
+    final providerId = await dataService.getProviderId();
+    if (providerId != null && providerId.isNotEmpty) {
+      if (mounted) setState(() => _initialRoute = const VinculacionScreen());
+      return;
+    }
+
+    final skipped = await dataService.hasVinculacionSkipped();
+    if (mounted) {
+      setState(() => _initialRoute = skipped
+          ? const HomeScreen()
+          : const VinculacionScreen());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _initialRoute ?? const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
   }
 }
