@@ -364,6 +364,35 @@ class DataService {
     }
   }
 
+  // ── CANCELAR PEDIDO ──
+
+  Future<void> cancelarPedido(String ventaId) async {
+    try {
+      await _supabase
+          .from('ventas')
+          .update({'estado': 'cancelado'})
+          .eq('id', ventaId);
+    } catch (e) {
+      throw Exception('Error al cancelar pedido: $e');
+    }
+  }
+
+  // ── NEGOCIO POR ID ──
+
+  Future<Negocio?> getNegocioById(String negocioId) async {
+    try {
+      final response = await _supabase
+          .from('negocios')
+          .select()
+          .eq('id', negocioId)
+          .maybeSingle();
+
+      return response != null ? Negocio.fromMap(response) : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   // ── HACER PEDIDO ──
 
   Future<void> hacerPedido(

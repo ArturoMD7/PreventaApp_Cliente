@@ -51,9 +51,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Cargar nombre del perfil
       final perfil = await _dataService.getMiPerfil();
-      _nombreUsuario = perfil?['nombre'] ??
-          user?.userMetadata?['full_name'] ??
-          'Mi perfil';
+      _nombreUsuario =
+          perfil?['nombre'] ?? user?.userMetadata?['full_name'] ?? 'Mi perfil';
 
       final negocio = await _dataService.getNegocio();
       if (negocio == null) {
@@ -77,8 +76,9 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -87,15 +87,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _aplicarFiltros() {
     setState(() {
-      _productosFiltrados = _productos.where((p) {
-        final coincideTexto = p.nombre
-            .toLowerCase()
-            .contains(_filtroBusqueda.toLowerCase());
-        final coincideCat = _categoriaSeleccionada == null ||
-            _categoriaSeleccionada == 'Todas' ||
-            p.categoriaId == _categoriaSeleccionada;
-        return coincideTexto && coincideCat;
-      }).toList();
+      _productosFiltrados =
+          _productos.where((p) {
+            final coincideTexto = p.nombre.toLowerCase().contains(
+              _filtroBusqueda.toLowerCase(),
+            );
+            final coincideCat =
+                _categoriaSeleccionada == null ||
+                _categoriaSeleccionada == 'Todas' ||
+                p.categoriaId == _categoriaSeleccionada;
+            return coincideTexto && coincideCat;
+          }).toList();
     });
   }
 
@@ -105,10 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
         final item = _carrito[producto.id!]!;
         item['cantidad'] = (item['cantidad'] as int) + 1;
       } else {
-        _carrito[producto.id!] = {
-          'producto': producto,
-          'cantidad': 1,
-        };
+        _carrito[producto.id!] = {'producto': producto, 'cantidad': 1};
       }
     });
     ScaffoldMessenger.of(context).showSnackBar(
@@ -124,14 +123,16 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
             double total = 0;
             _carrito.forEach((key, item) {
               total +=
-                  (item['producto'] as Producto).precio * (item['cantidad'] as int);
+                  (item['producto'] as Producto).precio *
+                  (item['cantidad'] as int);
             });
 
             return Padding(
@@ -144,21 +145,24 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Mi Carrito',
-                      style: TextStyle(
-                          fontSize: 24, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Mi Carrito',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                  ),
                   const Divider(),
                   if (_carrito.isEmpty)
                     const Padding(
                       padding: EdgeInsets.all(32.0),
-                      child: Text('El carrito está vacío',
-                          style: TextStyle(fontSize: 16, color: Colors.grey)),
+                      child: Text(
+                        'El carrito está vacío',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
                     )
                   else
                     ConstrainedBox(
                       constraints: BoxConstraints(
-                          maxHeight:
-                              MediaQuery.of(context).size.height * 0.5),
+                        maxHeight: MediaQuery.of(context).size.height * 0.5,
+                      ),
                       child: ListView.builder(
                         shrinkWrap: true,
                         itemCount: _carrito.length,
@@ -169,11 +173,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           final cant = item['cantidad'] as int;
 
                           return ListTile(
-                            title: Text(prod.nombre,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold)),
+                            title: Text(
+                              prod.nombre,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             subtitle: Text(
-                                '\$${prod.precio.toStringAsFixed(2)} c/u'),
+                              '\$${prod.precio.toStringAsFixed(2)} c/u',
+                            ),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -192,10 +200,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                     });
                                   },
                                 ),
-                                Text('$cant',
-                                    style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold)),
+                                Text(
+                                  '$cant',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                                 IconButton(
                                   icon: const Icon(Icons.add_circle_outline),
                                   onPressed: () {
@@ -218,26 +229,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total:',
-                            style: TextStyle(
-                                fontSize: 20, fontWeight: FontWeight.bold)),
-                        Text('\$${total.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue)),
+                        const Text(
+                          'Total:',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          '\$${total.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed: _carrito.isEmpty
-                          ? null
-                          : () async {
-                              Navigator.pop(context);
-                              await _enviarPedido(total);
-                            },
+                      onPressed:
+                          _carrito.isEmpty
+                              ? null
+                              : () async {
+                                Navigator.pop(context);
+                                await _enviarPedido(total);
+                              },
                       child: const Text('Enviar Pedido al Proveedor'),
                     ),
                   ),
@@ -262,23 +281,29 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         showDialog(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('¡Pedido Enviado! 🎉'),
-            content: const Text(
-                'Tu pedido ha sido enviado al proveedor con éxito.'),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Aceptar'))
-            ],
-          ),
+          builder:
+              (context) => AlertDialog(
+                title: const Text('¡Pedido Enviado! 🎉'),
+                content: const Text(
+                  'Tu pedido ha sido enviado al proveedor con éxito.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Aceptar'),
+                  ),
+                ],
+              ),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text('Error al enviar pedido: $e'),
-            backgroundColor: Colors.red));
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -294,7 +319,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // Encabezado
           UserAccountsDrawerHeader(
             decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary),
+              color: Theme.of(context).colorScheme.primary,
+            ),
             accountName: Text(
               _nombreUsuario.isNotEmpty ? _nombreUsuario : 'Mi Perfil',
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -304,18 +330,18 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: Colors.white,
               backgroundImage:
                   _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
-              child: _avatarUrl == null
-                  ? Text(
-                      (_nombreUsuario.isNotEmpty
-                              ? _nombreUsuario[0]
-                              : '?')
-                          .toUpperCase(),
-                      style: TextStyle(
+              child:
+                  _avatarUrl == null
+                      ? Text(
+                        (_nombreUsuario.isNotEmpty ? _nombreUsuario[0] : '?')
+                            .toUpperCase(),
+                        style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary),
-                    )
-                  : null,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      )
+                      : null,
             ),
           ),
 
@@ -337,13 +363,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Tienda activa',
-                            style:
-                                TextStyle(fontSize: 11, color: Colors.grey)),
+                        const Text(
+                          'Tienda activa',
+                          style: TextStyle(fontSize: 11, color: Colors.grey),
+                        ),
                         Text(
                           _negocio!.nombreNegocio,
                           style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 14),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ],
@@ -362,9 +391,9 @@ class _HomeScreenState extends State<HomeScreen> {
             title: const Text('Mi Perfil'),
             onTap: () async {
               Navigator.pop(context);
-              final updated = await Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProfileScreen()),
-              );
+              final updated = await Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const ProfileScreen()));
               if (updated == true) _cargarDatos();
             },
           ),
@@ -373,9 +402,9 @@ class _HomeScreenState extends State<HomeScreen> {
             title: const Text('Mis Tiendas'),
             onTap: () {
               Navigator.pop(context);
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const StoresScreen()),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const StoresScreen()));
             },
           ),
           ListTile(
@@ -395,13 +424,16 @@ class _HomeScreenState extends State<HomeScreen> {
           // Cerrar sesión
           ListTile(
             leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text('Cerrar Sesión',
-                style: TextStyle(color: Colors.red)),
+            title: const Text(
+              'Cerrar Sesión',
+              style: TextStyle(color: Colors.red),
+            ),
             onTap: () async {
               await AuthService().signOut();
               if (mounted) {
                 Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()));
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                );
               }
             },
           ),
@@ -426,8 +458,11 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: Row(
             children: [
-              Icon(Icons.warning_amber_rounded,
-                  color: Colors.orange.shade700, size: 22),
+              Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.orange.shade700,
+                size: 22,
+              ),
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
@@ -451,15 +486,19 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.storefront_outlined,
-                      size: 80, color: Colors.grey.shade300),
+                  Icon(
+                    Icons.storefront_outlined,
+                    size: 80,
+                    color: Colors.grey.shade300,
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'Sin proveedor',
                     style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black54),
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black54,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -483,9 +522,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   TextButton.icon(
                     onPressed: () {
                       Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const StoresScreen(),
-                        ),
+                        MaterialPageRoute(builder: (_) => const StoresScreen()),
                       );
                     },
                     icon: const Icon(Icons.store_outlined, size: 18),
@@ -502,8 +539,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    int totalItemsCarrito = _carrito.values
-        .fold(0, (sum, item) => sum + (item['cantidad'] as int));
+    int totalItemsCarrito = _carrito.values.fold(
+      0,
+      (sum, item) => sum + (item['cantidad'] as int),
+    );
 
     return Scaffold(
       drawer: _buildDrawer(),
@@ -512,102 +551,107 @@ class _HomeScreenState extends State<HomeScreen> {
         actions: [
           // Cambio rápido de tienda
           IconButton(
-            icon: const Icon(Icons.swap_horiz),
-            tooltip: 'Cambiar Tienda',
+            icon: const Icon(Icons.add_business_outlined),
+            tooltip: 'Agregar Tienda',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const StoresScreen()),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const StoresScreen()));
             },
           ),
         ],
       ),
-      floatingActionButton: _negocio != null
-          ? FloatingActionButton.extended(
-              onPressed: _mostrarCarrito,
-              icon: const Icon(Icons.shopping_cart),
-              label: Text('Carrito ($totalItemsCarrito)'),
-            )
-          : null,
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _negocio == null
+      floatingActionButton:
+          _negocio != null
+              ? FloatingActionButton.extended(
+                onPressed: _mostrarCarrito,
+                icon: const Icon(Icons.shopping_cart),
+                label: Text('Carrito ($totalItemsCarrito)'),
+              )
+              : null,
+      body:
+          _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _negocio == null
               ? _buildSinProveedor()
               : Column(
-                  children: [
-                    // Barra de búsqueda
-                    Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: TextField(
-                        decoration: const InputDecoration(
-                          labelText: 'Buscar producto...',
-                          prefixIcon: Icon(Icons.search),
-                        ),
-                        onChanged: (val) {
-                          _filtroBusqueda = val;
-                          _aplicarFiltros();
-                        },
+                children: [
+                  // Barra de búsqueda
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Buscar producto...',
+                        prefixIcon: Icon(Icons.search),
                       ),
+                      onChanged: (val) {
+                        _filtroBusqueda = val;
+                        _aplicarFiltros();
+                      },
                     ),
+                  ),
 
-                    // Categorías
-                    if (_categorias.isNotEmpty)
-                      SizedBox(
-                        height: 50,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          children: [
-                            Padding(
+                  // Categorías
+                  if (_categorias.isNotEmpty)
+                    SizedBox(
+                      height: 50,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: const Text('Todas'),
+                              selected:
+                                  _categoriaSeleccionada == null ||
+                                  _categoriaSeleccionada == 'Todas',
+                              onSelected: (selected) {
+                                setState(() {
+                                  _categoriaSeleccionada = 'Todas';
+                                  _aplicarFiltros();
+                                });
+                              },
+                            ),
+                          ),
+                          ..._categorias.map(
+                            (cat) => Padding(
                               padding: const EdgeInsets.only(right: 8),
                               child: ChoiceChip(
-                                label: const Text('Todas'),
-                                selected: _categoriaSeleccionada == null ||
-                                    _categoriaSeleccionada == 'Todas',
+                                label: Text(cat.nombre),
+                                selected: _categoriaSeleccionada == cat.id,
                                 onSelected: (selected) {
                                   setState(() {
-                                    _categoriaSeleccionada = 'Todas';
+                                    _categoriaSeleccionada =
+                                        selected ? cat.id : 'Todas';
                                     _aplicarFiltros();
                                   });
                                 },
                               ),
                             ),
-                            ..._categorias.map(
-                              (cat) => Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: ChoiceChip(
-                                  label: Text(cat.nombre),
-                                  selected: _categoriaSeleccionada == cat.id,
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      _categoriaSeleccionada =
-                                          selected ? cat.id : 'Todas';
-                                      _aplicarFiltros();
-                                    });
-                                  },
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
+                    ),
 
-                    const SizedBox(height: 8),
+                  const SizedBox(height: 8),
 
-                    // Grid de Productos
-                    Expanded(
-                      child: _productosFiltrados.isEmpty
-                          ? const Center(
-                              child: Text('No se encontraron productos'))
-                          : GridView.builder(
+                  // Grid de Productos
+                  Expanded(
+                    child:
+                        _productosFiltrados.isEmpty
+                            ? const Center(
+                              child: Text('No se encontraron productos'),
+                            )
+                            : GridView.builder(
                               padding: const EdgeInsets.all(16),
                               gridDelegate:
                                   const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                childAspectRatio: 0.75,
-                                crossAxisSpacing: 16,
-                                mainAxisSpacing: 16,
-                              ),
+                                    crossAxisCount: 2,
+                                    childAspectRatio: 0.75,
+                                    crossAxisSpacing: 16,
+                                    mainAxisSpacing: 16,
+                                  ),
                               itemCount: _productosFiltrados.length,
                               itemBuilder: (context, index) {
                                 final prod = _productosFiltrados[index];
@@ -629,12 +673,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 color: Colors.grey.shade100,
                                                 borderRadius:
                                                     const BorderRadius.vertical(
-                                                        top: Radius.circular(16)),
+                                                      top: Radius.circular(16),
+                                                    ),
                                               ),
                                               child: const Center(
-                                                child: Icon(Icons.image,
-                                                    size: 64,
-                                                    color: Colors.grey),
+                                                child: Icon(
+                                                  Icons.image,
+                                                  size: 64,
+                                                  color: Colors.grey,
+                                                ),
                                               ),
                                             ),
                                             if (enCarrito > 0)
@@ -645,19 +692,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                                   width: 28,
                                                   height: 28,
                                                   decoration: BoxDecoration(
-                                                    color: Theme.of(context)
-                                                        .colorScheme
-                                                        .primary,
+                                                    color:
+                                                        Theme.of(
+                                                          context,
+                                                        ).colorScheme.primary,
                                                     shape: BoxShape.circle,
                                                   ),
                                                   child: Center(
                                                     child: Text(
                                                       '$enCarrito',
                                                       style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 13),
+                                                        color: Colors.white,
+                                                        fontWeight:
+                                                            FontWeight.bold,
+                                                        fontSize: 13,
+                                                      ),
                                                     ),
                                                   ),
                                                 ),
@@ -674,8 +723,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                             Text(
                                               prod.nombre,
                                               style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 15),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 15,
+                                              ),
                                               maxLines: 2,
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -683,19 +733,24 @@ class _HomeScreenState extends State<HomeScreen> {
                                             Text(
                                               '\$${prod.precio.toStringAsFixed(2)}',
                                               style: const TextStyle(
-                                                  color: Colors.blue,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 18),
+                                                color: Colors.blue,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 18,
+                                              ),
                                             ),
                                             const SizedBox(height: 10),
                                             ElevatedButton(
-                                              onPressed: () =>
-                                                  _agregarAlCarrito(prod),
+                                              onPressed:
+                                                  () => _agregarAlCarrito(prod),
                                               style: ElevatedButton.styleFrom(
-                                                minimumSize:
-                                                    const Size(double.infinity, 36),
-                                                padding: const EdgeInsets.symmetric(
-                                                    vertical: 8),
+                                                minimumSize: const Size(
+                                                  double.infinity,
+                                                  36,
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      vertical: 8,
+                                                    ),
                                               ),
                                               child: const Text('Agregar'),
                                             ),
@@ -707,9 +762,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 );
                               },
                             ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
+              ),
     );
   }
 }
