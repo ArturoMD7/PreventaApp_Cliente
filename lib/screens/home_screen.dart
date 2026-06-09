@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import '../services/data_service.dart';
+import '../services/notification_service.dart';
 import '../models/producto.dart';
 import '../models/categoria.dart';
 import '../models/negocio.dart';
@@ -40,6 +41,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _cargarDatos();
+    // Iniciar notificaciones vía Supabase Realtime
+    NotificationService().init();
   }
 
   Future<void> _cargarDatos() async {
