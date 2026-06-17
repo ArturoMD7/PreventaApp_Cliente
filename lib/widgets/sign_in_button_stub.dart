@@ -1,29 +1,41 @@
 import 'package:flutter/material.dart';
 
-/// Stub para mobile/desktop — botón personalizado que requiere onPressed.
 Widget buildGoogleSignInButton({required VoidCallback onPressed}) {
-  return SizedBox(
-    height: 56,
-    child: OutlinedButton.icon(
-      onPressed: onPressed,
-      icon: Image.asset(
-        'assets/google.png',
-        height: 24,
+  return GestureDetector(
+    onTap: onPressed,
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(50),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.30),
+            blurRadius: 24,
+            offset: const Offset(0, 10),
+          ),
+          BoxShadow(
+            color: const Color(0xFF3B82F6).withOpacity(0.25),
+            blurRadius: 32,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
-      label: const Text(
-        'Continuar con Google',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: Colors.black87,
-        ),
-      ),
-      style: OutlinedButton.styleFrom(
-        side: const BorderSide(color: Colors.grey, width: 1),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        backgroundColor: Colors.white,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Image.asset('assets/google.png', height: 26),
+          const SizedBox(width: 14),
+          const Text(
+            'Continuar con Google',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+              letterSpacing: 0.4,
+            ),
+          ),
+        ],
       ),
     ),
   );
